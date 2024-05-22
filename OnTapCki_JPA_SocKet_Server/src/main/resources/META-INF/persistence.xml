@@ -1,0 +1,447 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<persistence xmlns="https://jakarta.ee/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="https://jakarta.ee/xml/ns/persistence https://jakarta.ee/xml/ns/persistence/persistence_3_0.xsd"
+             version="3.0">
+    <persistence-unit name="OnTapJPA_SocKet_sql">
+        <provider>org.hibernate.jpa.HibernatePersistenceProvider</provider>
+        <properties>
+            <property name="jakarta.persistence.jdbc.driver"
+                      value="com.microsoft.sqlserver.jdbc.SQLServerDriver" />
+            <property name="jakarta.persistence.jdbc.url"
+                      value="jdbc:sqlserver://localhost:1433;databaseName=CKI;trustServerCertificate=true;encrypt=true;" />
+            <property name="jakarta.persistence.jdbc.user" value="sa" />
+            <property name="jakarta.persistence.jdbc.password"
+                      value="sapassword" />
+            <property name="jakarta.persistence.jdbc.dialect"
+                      value="org.hibernate.dialect.SQLServerDialect" />
+            <property name="hibernate.show_sql" value="true" />
+            <property name="hibernate.format_sql" value="true" />
+            <property name="hibernate.hbm2ddl.auto" value="update" />
+        </properties>
+    </persistence-unit>
+</persistence>
+
+<!--
+Enum
+public enum Status implements Serializable {
+    PENDING("PENDING"), APPROVED("APPROVED"), REJECTED("REJECTED");
+
+    private String status;
+
+    Status(String status) {
+        this.status = status;
+    }
+    public String getStatus() {
+        return status;
+    }
+
+    @Override
+    public String toString() {
+        return
+                ", status='" + status + "' ";
+    }
+    public static Status fromString(String status) {
+        return Status.valueOf(status.toUpperCase());
+    }
+}
+***Ben class chua enum goi
+@Embedded
+    protected Approval approval;
+
+
+Set<String> trong class sẽ tạo ra bảng riêng no
+@ElementCollection
+    @CollectionTable(name = "books_authors", joinColumns = @JoinColumn(name = "ISBN"))
+    @Column(name = "author",nullable = false)
+    protected Set<String> authors;
+
+
+@Inheritance(strategy = InheritanceType.JOINED) => tao bang rieng cho class con có chứa khóa ngoại của class cha
+@Inheritance(strategy = InheritanceType.SINGLE_TABLE) => tạo bảng chung cho class cha và class con, lấy tất cả thuộc tính của class cha và class con
+@Inheritance(strategy = InheritanceType.TABLE_PER_CLASS) => tạo ra 2 bảng riêng cho class cha và class con ,mỗi bảng chứa các thuộc tính của class đó
+@MapperSuperClass tạo class con, k tạo clas cha. Lấy thuộc tính class cha vào con
+***Trong class sql có them cot rieng thi dung
+@DiscriminatorColumn(name = "Discriminator", discriminatorType = DiscriminatorType.STRING)
+
+*** Nhúng class vào class khác
+class nay su dung @Embeddable
+class kia su dung @Embedded
+
+Dạng câu: Map lồng Set bên trong
+//f) Liệt kê danh sách các ứng viên và danh sách bằng cấp của từng ứng viên.
+    @Override
+    public Map<Candidate, Set<Certificate>> listCadidatesAndCertificates() {
+        String sql="select c, ce from Candidate c join Certificate ce on c.id=ce.candidate.id";
+        Map<Candidate, Set<Certificate>> listCandidates = new HashMap<>();
+        try {
+            et.begin();
+            List<Object[]> list = em.createQuery(sql,Object[].class).getResultList();
+            for (Object[] objects : list) {
+                Candidate candidate = (Candidate) objects[0];
+                Certificate certificate = (Certificate) objects[1];
+                if (listCandidates.containsKey(candidate)){
+                    listCandidates.get(candidate).add(certificate);
+                }else {
+                    Set<Certificate> certificates = new HashSet<>();
+                    certificates.add(certificate);
+                    listCandidates.put(candidate,certificates);
+                }
+            }
+            et.commit();
+            return listCandidates;
+        } catch (Exception e) {
+            et.rollback();
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+Test:
+//f) Liệt kê danh sách các ứng viên và danh sách bằng cấp của từng ứng viên
+    @Test
+    public void testListCandidatesByDegrees() {
+        System.out.println("Danh sách các ứng viên và danh sách bằng cấp của từng ứng viên: ");
+        Map<Candidate, Set<Certificate>> map = candidateDao.listCadidatesAndCertificates();
+        Assertions.assertNotNull(map);
+        Assertions.assertEquals(11, map.size());
+//        for (Map.Entry<Candidate, Set<Certificate>> entry : map.entrySet()) {
+//            System.out.println(entry.getKey().getId() + " - " + entry.getKey().getFullName());
+//            for (Certificate certificate : entry.getValue()) {
+//                System.out.println("\t" + certificate.getName());
+//            }
+//        }
+    }
+
+Server:
+//f) Liệt kê danh sách các ứng viên và danh sách bằng cấp của từng ứng viên
+case 6:
+    Map<Candidate, Set<Certificate>> map3 = candidateDao.listCadidatesAndCertificates();
+    oos.writeObject(map3);
+    oos.flush();
+    break;
+
+Client:
+//f) Liệt kê danh sách các ứng viên và danh sách bằng cấp của từng ứng viên
+case 6:
+    sc.nextLine();
+    System.out.println("Danh sách các ứng viên và danh sách bằng cấp của từng ứng viên: ");
+    Map<Candidate, Set<Certificate>> map3 = (Map<Candidate, Set<Certificate>>) ois.readObject();
+    for (Map.Entry<Candidate, Set<Certificate>> entry : map3.entrySet()) {
+        System.out.println(entry.getKey().getId() + " - " + entry.getKey().getFullName());
+        for (Certificate certificate : entry.getValue()) {
+            System.out.println("\t" + certificate.getName());
+        }
+    }
+    break;
+
+Dạng câu: Map<Candidate, Long>
+// b) Liệt kê danh sách các ứng viên và số công ty mà các ứng viên này từng làm
+@Override
+public Map<Candidate, Long> listCadidatesByCompanies() {
+    String sql = "select c, COUNT(*) as soLuongcongty from Candidate c join Experience e on c.id=e.candidate.id group by c";
+    Map<Candidate, Long> listCandidates = new HashMap<>();
+    try {
+        et.begin();
+        List<Object[]> list = em.createQuery(sql, Object[].class).getResultList();
+        for (Object[] objects : list) {
+            Candidate candidate = (Candidate) objects[0];
+            Long count = (Long) objects[1];
+            listCandidates.put(candidate, count);
+        }
+        et.commit();
+        return listCandidates;
+    } catch (Exception e) {
+        et.rollback();
+        e.printStackTrace();
+    }
+    return null;
+}
+Test:
+//b) Liệt kê danh sách các ứng viên và số công ty mà các ứng viên này từng làm.
+    @Test
+    public void testListCadidatesByCompanies() {
+        System.out.println("Danh sách các ứng viên và số công ty mà các ứng viên này từng làm: ");
+        Map<Candidate,Long> map= candidateDao.listCadidatesByCompanies();
+        Assertions.assertNotNull(map);
+        Assertions.assertEquals(7,map.size());
+//        for (Map.Entry<Candidate, Long> entry : map.entrySet()) {
+//            System.out.println(entry.getKey().getFullName() + " - " + entry.getValue());
+//        }
+    }
+
+Server:
+//b) Liệt kê danh sách các ứng viên và số công ty mà các ứng viên này từng làm
+case 2:
+    Map<Candidate, Long> map = candidateDao.listCadidatesByCompanies();
+    oos.writeObject(map);
+    oos.flush();
+    break;
+Client:
+//b) Liệt kê danh sách các ứng viên và số công ty mà các ứng viên này từng làm
+case 2:
+    sc.nextLine();
+    System.out.println("Danh sách các ứng viên và số công ty mà các ứng viên này từng làm: ");
+    Map<Candidate, Long> map = (Map<Candidate, Long>) ois.readObject();
+    for (Map.Entry<Candidate, Long> entry : map.entrySet()) {
+        System.out.println(entry.getKey().getFullName() + " - " + entry.getValue());
+    }
+
+Dạng câu: Map<Position, Integer>
+//e) Tính số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên
+// dung cast (Bằng cách sử dụng `CASTCAST(... AS INTEGER)trong SQL của bạn Integer, bạn có thể chuyển đổi một giá trị số thực thành một số nguyên. ) tu do chuyen doi nam thanh so nguyen
+@Override
+public Map<Position, Integer> listYearsOfExperienceByPositionn(String candidateID) {
+    String sql="select p, cast(SUM(YEAR(e.toDate)-YEAR(e.fromDate)) as integer ) as soNamLamViec from Position p join Candidate c on c.position.id=p.id join Experience e on c.id=e.candidate.id where c.id =:candidateID group by p";
+    Map<Position, Integer> listYearsOfExperience = new HashMap<>();
+    try {
+        et.begin();
+        List<Object[]> list = em.createQuery(sql,Object[].class)
+                .setParameter("candidateID",candidateID)
+                .getResultList();
+
+        list.forEach(objects -> {
+            Position position = (Position) objects[0];
+            Integer soNamLamViec = (Integer) objects[1];
+            listYearsOfExperience.put(position, soNamLamViec);
+        });
+        et.commit();
+        return listYearsOfExperience;
+    } catch (Exception e) {
+        et.rollback();
+        e.printStackTrace();
+    }
+    return null;
+}
+
+Test:
+//e) Tính số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên.
+    @Test
+    public void testListYearsOfExperienceByPositionn() {
+        System.out.println("Số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên: ");
+        Map<Position, Integer> map = positionsDao.listYearsOfExperienceByPositionn("C101");
+        Assertions.assertNotNull(map);
+        Assertions.assertEquals(1, map.size());
+//        for (Map.Entry<Position, Integer> entry : map.entrySet()) {
+//            System.out.println(entry.getKey().getName() + " - " + entry.getValue());
+//        }
+    }
+Server:
+//e) Tính số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên
+case 5:
+    Map<Position, Integer> map2 = positionsDao.listYearsOfExperienceByPositionn(dis.readUTF());
+    oos.writeObject(map2);
+    oos.flush();
+    break;
+
+Client:
+//e) Tính số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên
+case 5:
+    sc.nextLine();
+    System.out.println("Số năm làm việc trên một vị trí công việc nào đó khi biết mã số ứng viên: ");
+    System.out.println("Nhập mã số ứng viên: ");
+    String candidateId = sc.next();
+
+    dos.writeUTF(candidateId);
+
+    Map<Position, Integer> map2 = (Map<Position, Integer>) ois.readObject();
+    for (Map.Entry<Position, Integer> entry : map2.entrySet()) {
+        System.out.println(entry.getKey().getName() + " - " + entry.getValue());
+    }
+
+    break;
+
+Dạng Câu Thêm, Cập Nhật
+//d) Thêm một ứng viên mới. Trong đó mã số ứng viên phải bắt đầu là C, theo sau ít nhất là 3 ký số.
+@Override
+public boolean addCandidate(Candidate candidate) {
+    try {
+        et.begin();
+        if (candidate.getId().matches("C\\d{3,}"))
+            em.persist(candidate);
+        else
+            return false;
+        et.commit();
+        return true;
+    } catch (Exception e) {
+        et.rollback();
+        e.printStackTrace();
+    }
+    return false;
+}
+
+Test
+//d) Thêm một ứng viên mới. Trong đó mã số ứng viên phải bắt đầu là C, theo sau ít nhất là 3 ký số.
+    @Test
+    public void testAddCandidate() {
+        Candidate candidate = new Candidate();
+        Position position = new Position();
+        candidate.setId("C113");
+        candidate.setFullName("Nguyen Van A");
+        candidate.setYearOfBirth(1999);
+        candidate.setGender("Male");
+        candidate.setEmail("ANguyen@gmail.com");
+        candidate.setPhone("0123456789");
+        candidate.setDescription("Software Engineer");
+        candidate.setPosition(em.find(Position.class, "P102"));
+
+        Assertions.assertNotNull(candidate);
+        Assertions.assertTrue(candidateDao.addCandidate(candidate));
+
+//        System.out.println("Thêm ứng viên mới: ");
+//        if (candidateDao.addCandidate(candidate)) {
+//            System.out.println("Thêm thành công");
+//        } else {
+//            System.out.println("Thêm thất bại");
+//        }
+    }
+
+Server
+//d) Thêm một ứng viên mới. Trong đó mã số ứng viên phải bắt đầu là C, theo sau ít nhất là 3 ký số.
+case 4:
+    Candidate candidate = new Candidate();
+    candidate.setId(dis.readUTF());
+    candidate.setFullName(dis.readUTF());
+    candidate.setYearOfBirth(dis.readInt());
+    candidate.setGender(dis.readUTF());
+    candidate.setEmail(dis.readUTF());
+    candidate.setPhone(dis.readUTF());
+    candidate.setDescription(dis.readUTF());
+    Position position1 = positionsDao.getFindById(dis.readUTF());
+    candidate.setPosition(position1);
+
+    boolean rs = candidateDao.addCandidate(candidate);
+    oos.writeBoolean(rs);
+    oos.flush();
+    break;
+
+Client
+//d) Thêm một ứng viên mới. Trong đó mã số ứng viên phải bắt đầu là C, theo sau ít nhất là 3 ký số.
+case 4:
+    sc.nextLine();
+    System.out.println("Thêm ứng viên mới: ");
+    System.out.println("Nhập mã số ứng viên: ");
+    String id = sc.next();
+    System.out.println("Nhập họ tên ứng viên: ");
+    String fullName = sc.next();
+    System.out.println("Nhập năm sinh: ");
+    int yearOfBirth = Integer.parseInt(sc.next());
+    System.out.println("Nhập giới tính: ");
+    String gender = sc.next();
+    System.out.println("Nhập email: ");
+    String email = sc.next();
+    System.out.println("Nhập số điện thoại: ");
+    String phone = sc.next();
+    System.out.println("Nhập mô tả: ");
+    String description = sc.next();
+    System.out.println("Nhập mã số vị trí công việc: ");
+    String positionId = sc.next();
+
+    dos.writeUTF(id);
+    dos.writeUTF(fullName);
+    dos.writeInt(yearOfBirth);
+    dos.writeUTF(gender);
+    dos.writeUTF(email);
+    dos.writeUTF(phone);
+    dos.writeUTF(description);
+    dos.writeUTF(positionId);
+
+    boolean rs = ois.readBoolean();
+    if (rs) {
+        System.out.println("Thêm thành công");
+    } else {
+        System.out.println("Thêm thất bại");
+    }
+    break;
+
+
+
+Class Client
+public static void main(String[] args) {
+        try (Socket socket = new Socket("LAPTOP-NE7C2S28", 1234);
+             Scanner sc = new Scanner(System.in);
+             DataOutputStream dos = new DataOutputStream(socket.getOutputStream());
+             ObjectInputStream ois = new ObjectInputStream(socket.getInputStream())
+        ) {
+            while (true) {
+                System.out.println("Menu");
+                System.out.println("1. Liệt kê danh sách các vị trí công việc khi biết tên vị trí (tìm tương đối) và mức lương khoảng từ, \n" +
+                        "kết quả sắp xếp theo tên vị trí công việc");
+                System.out.println("2. Exit");
+
+                int choice = sc.nextInt();
+                dos.writeInt(choice);
+                switch (choice) {
+                    //a) Liệt kê danh sách các vị trí công việc khi biết tên vị trí (tìm tương đối) và mức lương khoảng từ,
+                    //kết quả sắp xếp theo tên vị trí công việc
+                    case 1:
+                    break;
+                    case 2:
+                        System.exit(0);
+                        break;
+                        default:
+                        System.out.println("Invalid choice");
+                        break;
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    Server
+    public static void main(String[] args) {
+        try (ServerSocket serverSocket = new ServerSocket(1234)) {
+            System.out.println("Connected to server...");
+
+            while (true) {
+                Socket socket = serverSocket.accept();
+                Server server = new Server();
+                System.out.println("Connected to client: " + socket.getInetAddress().getHostName());
+                new Thread(server.new Handler(socket)).start();
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    public class Handler implements Runnable {
+        private Socket socket;
+        private ImplCandidateDao candidateDao;
+        private ImplPositionsDao positionsDao;
+        private EntityManager em;
+        private EntityTransaction et;
+
+        public Handler(Socket socket) {
+            this.socket = socket;
+            candidateDao = new CandidateDao();
+            positionsDao = new PositionsDao();
+            EntityManagerFactory emf = Persistence.createEntityManagerFactory("OnTapJPA_SocKet_sql");
+            em = emf.createEntityManager();
+            et = em.getTransaction();
+        }
+
+        @Override
+        public void run() {
+            try {
+                DataInputStream dis = new DataInputStream(socket.getInputStream());
+                ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
+
+                while (true) {
+                    int choice = dis.readInt();
+                    switch (choice) {
+                        case 1:
+                            break;
+                        case 2:
+                            System.out.println("Client disconnected...");
+                            break;
+                    }
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+-->
+
